@@ -1,0 +1,23 @@
+library("tidyverse")
+library("performance")
+
+##Loading and checking data
+rt2 <- read.csv("vcor_qpcr_datafile.csv")
+str(rt2)
+
+#Manuscript stats
+Anova(statrt)
+performance::check_model(statrt)
+TukeyHSD(statrt)
+
+#figure 5 of manuscript
+figplot <- ggplot(rt2, aes(x=fct_reorder(diet, -dCT), y=-dCT))+
+  geom_boxplot()+
+  geom_point()+
+  theme_classic()+
+  geom_signif(comparisons = list(c("Facultative corallivore", "Grazer/detritivore")), 
+              map_signif_level=TRUE, y_position = -8,annotation ="*")+
+  geom_signif(comparisons = list(c("Obligate corallivore", "Grazer/detritivore")), 
+              map_signif_level=TRUE, y_position = -7,annotation ="**")
+figplot
+
