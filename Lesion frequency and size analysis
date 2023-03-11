@@ -1,15 +1,19 @@
 ##########################LESION FREQUENCIES#######################
+library("tidyverse")
+library("ordinal")
 
 ############Coral health statistics
-#Load and check file for Xi2 test
+#Load and check file for statistics
 graco <- read.csv("graco_coralhealth_xi2.csv")
 str(graco)
 
-#check sata distributions
+#check data distributions
 graccomp2 <-table(graco$treatment, graco$health)
 
-#conuduct Xi2 test
-chisq.test(graco$treatment, graco$health, simulate.p.value = TRUE)
+x <- clm(as.factor(health) ~ factor(treatment)+itcol, data = graco)
+x
+summary(x)
+Anova(x)
 
 #Load and check data file for figure
 graco <- read.csv("shorthealth2.csv")
@@ -18,13 +22,12 @@ str(graco)
 ############Make figure 1 panel A
 gracolors <- c("black", "grey", "coral")
 
-gracofig <- ggplot(graco, aes(x=Treatment, y=Count,fill=fct_relevel(Health, levels = c("Dead","Lesion", "Healthy"))))+
+gracofig <- ggplot(graco, aes(x=Treatment, y=Count,fill=factor(Health, levels = c("Dead","Lesion", "Healthy"))))+
   geom_bar(stat="identity", color="black")+
   scale_fill_manual(values=gracolors)+
   labs(fill = "Health",y="Replicates", x="Treatment")+
   bar_theme()+
   lims(y=c(0,13))+
-  annotate("text", x=1.9, y=11.8, label="X2=23.6, p<0.01")+
   guides(fill=guide_legend(nrow=1,byrow=TRUE))+
   theme(axis.title.x=element_blank(),
         axis.text.x=element_blank(),
