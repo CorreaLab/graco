@@ -1,0 +1,648 @@
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(decontam)
+library(lme4)
+library(emmeans)
+library(dunn.test)
+library(Rmisc)
+library(pairwiseAdonis)
+library(MicEco)
+
+#first combine Supplementary Data Files 3-5 into a phyloseq object
+tax <- read.csv("Supplementary Data File 5 tax_table.csv")
+otu <- read.csv("Supplementary Data File 4 otu_table.csv")
+sample <- read.csv("Supplementary Data File 3 sample_data.csv")
+d2020<-phyloseq(tax, otu)
+sample_data(d2020) <- sample
+
+#Check replicates
+table(sample_data(d2020otu)$Diet)
+table(sample_data(d2020)$Species)
+
+#Quantify read depth
+readdepth <- sample_sums(d2020otu)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020otu)
+str(sample_data(d2020otu))
+map <- read.csv("sample_map_new2.csv")
+rd2 <- merge(rd, map, by="SampleID")
+
+#means
+rd3 <- rd2 
+str(rd3)
+mean(rd3$readdepth)
+min(rd3$readdepth)
+
+##########NMDS###########
+#remove rare taxa
+d2020xy <- prune_taxa(taxa_sums(d2020)>200, d2020)
+str(sample_data(d2020xy))
+min(sample_sums(d2020xy))
+
+readdepth <- sample_sums(d2020xy)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020xy)
+str(sample_data(d2020xy))
+map <- read.csv("sample_map_new2.csv")
+rd2 <- merge(rd, map, by="SampleID")
+
+#write.csv(rd2,"readdepth_Adrienne.csv")
+
+d2020xy <- prune_samples(sample_sums(d2020xy)>=1000, d2020xy) 
+str(sample_data(d2020xy))
+min(sample_sums(d2020xy))
+
+readdepth <- sample_sums(d2020xy)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020xy)
+str(sample_data(d2020xy))
+rd2 <- merge(rd, map, by="SampleID")
+min(rd2$readdepth)
+
+##########NMDS###########
+#remove rare taxa
+d2020xy <- prune_taxa(taxa_sums(d2020)>200, d2020)
+str(sample_data(d2020xy))
+min(sample_sums(d2020xy))
+
+readdepth <- sample_sums(d2020xy)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020xy)
+str(sample_data(d2020xy))
+map <- read.csv("sample_map_new2.csv")
+rd2 <- merge(rd, map, by="SampleID")
+
+d2020xy <- prune_samples(sample_sums(d2020xy)>=1000, d2020xy) 
+str(sample_data(d2020xy))
+min(sample_sums(d2020xy))
+
+readdepth <- sample_sums(d2020xy)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020xy)
+str(sample_data(d2020xy))
+rd2 <- merge(rd, map, by="SampleID")
+min(rd2$readdepth)
+
+#NMDS
+d2020nmds <- rarefy_even_depth(d2020xy, sample.size = min(sample_sums(d2020xy)),
+                               replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+
+#transform to relative abundances
+d2020nmds2 = transform_sample_counts(d2020nmds, function(x) x / sum(x) )
+table(sample_data(d2020nmds2)$Diet)
+table(sample_data(d2020nmds2)$Species)
+
+#d2020relnmds = transform_sample_counts(d2020rel, function(x) x / sum(x) )
+#View(sample_data(d2020relnmds))
+
+bray <- phyloseq::distance(physeq = d2020nmds2, method = "bray")
+mm <-vegan::metaMDS(bray, maxit=100, trymax=6000, k=3)
+mm
+
+#Extract scores and make figure
+nmdscores<-as.data.frame(scores(mm))
+nmdscores[4] = rownames(nmdscores)
+colnames(nmdscores)[4] <- "SampleID"
+metadata <- as(sample_data(d2020nmds), "data.frame")
+data.scores.2 <- merge(nmdscores, metadata, by="SampleID")
+
+colorvec <- c("#cffc65","#63371d", "#43C5E3","#E185D0","#307F4E","#F7560C")
+shapesx = c(21,22,24,21,22,24,25,21,22,24,21,22,24,21,22,24,25,23,16,21,22)
+colorsx = c("#63371d","#63371d","#63371d","#E185D0","#E185D0","#E185D0","#E185D0","#F7560C","#F7560C","#F7560C","#307F4E","#307F4E","#307F4E","#cffc65","#cffc65","#cffc65","#cffc65","#cffc65","#cffc65", "#43C5E3","#43C5E3")
+
+plot <- ggplot(data.scores.2, aes(x=NMDS1,y=NMDS2, fill=factor(Diet, levels=c("Algae","Coral","Environmental","Obl","Gra","Fac")), shape=factor(Species, levels=c("ACR","POC","POR","AMSC","CHLU","CHOR","CHRE","CHCI","CHPE","CHSP","CTFL","CTST","ZESC","Asp","Dict","Lob","Sarg","Turb","Turf","SED","WAT")))) +
+  theme_bw(base_size=12)+ 
+  scale_color_manual(values=colorsx)+
+  scale_fill_manual(labels = c("Algae","Coral","Environmental (sediment and water)", "Facultative corallivore feces", "Grazer/detritivore feces", "Obligate corallivore feces"),values=colorvec)+
+  geom_point(size=3, color="black") +
+  scale_shape_manual(values=shapesx)+
+  theme_bw()+
+  annotate("text", label="Stress = 0.09", x=-0.5, y=-0.35)+  
+  guides(fill = "none")+
+  guides(shape = guide_legend(override.aes=list(shape=shapesx, fill=colorsx)))+
+  labs(shape="Sample type")
+plot
+
+#####STATS
+d2020filt <- prune_samples(sample_sums(d2020)>=1000, d2020) 
+min(sample_sums(d2020filt))
+max(sample_sums(d2020filt))
+min(taxa_sums(d2020filt))
+
+d2020filt <- prune_taxa(taxa_sums(d2020filt)>1, d2020filt)
+min(sample_sums(d2020filt))
+min(taxa_sums(d2020filt))
+
+table(sample_data(d2020filt)$Diet)
+table(sample_data(d2020filt)$Species)
+
+#Stats by "diet"
+Obl <- d2020filt %>%
+  subset_samples(Diet == "Obl")
+Obl
+Fac <- d2020filt %>%
+  subset_samples(Diet == "Fac")
+Fac
+Alg<- d2020filt %>%
+  subset_samples(Diet == "Algae")
+Alg
+env <- d2020filt %>%
+  subset_samples(Diet == "Environmental")
+env
+Coral <- d2020filt %>%
+  subset_samples(Diet == "Coral")
+Coral
+Gra <- d2020filt %>%
+  subset_samples(Diet == "Gra")
+Gra
+
+oblsamp <- sample_n(as.data.frame(sample_data(Obl)$Sample_name), 18, replace=FALSE)
+Facsamp <- sample_n(as.data.frame(sample_data(Fac)$Sample_name), 18, replace=FALSE)
+Algsamp <- sample_n(as.data.frame(sample_data(Alg)$Sample_name), 18, replace=FALSE)
+Envsamp <- sample_n(as.data.frame(sample_data(env)$Sample_name), 18, replace=FALSE)
+Coralsamp <- sample_n(as.data.frame(sample_data(Coral)$Sample_name), 18, replace=FALSE)
+Grasamp <- sample_n(as.data.frame(sample_data(Gra)$Sample_name), 18, replace=FALSE)
+
+oblsampx <- as.character(get_variable(Obl, "Sample_name")) %in% oblsamp$`sample_data(Obl)$Sample_name`
+oblz <- prune_samples(oblsampx, Obl)
+oblsub <- prune_samples(sample_data(Obl)$Sample_name %in% oblsamp$`sample_data(Obl)$Sample_name`, Obl)
+oblsub
+
+Facsampx <- as.character(get_variable(Fac, "Sample_name")) %in% Facsamp$`sample_data(Fac)$Sample_name`
+Facz <- prune_samples(Facsampx, Fac)
+Facsub <- prune_samples(sample_data(Fac)$Sample_name %in% Facsamp$`sample_data(Fac)$Sample_name`, Fac)
+Facsub
+
+Algsampx <- as.character(get_variable(Alg, "Sample_name")) %in% Algsamp$`sample_data(Alg)$Sample_name`
+Algz <- prune_samples(Algsampx, Alg)
+Algsub <- prune_samples(sample_data(Alg)$Sample_name %in% Algsamp$`sample_data(Alg)$Sample_name`, Alg)
+Algsub
+
+Envsampx <- as.character(get_variable(env, "Sample_name")) %in% Envsamp$`sample_data(env)$Sample_name`
+Envz <- prune_samples(Envsampx, env)
+Envsub <- prune_samples(sample_data(env)$Sample_name %in% Envsamp$`sample_data(env)$Sample_name`, env)
+Envsub
+
+Coralsampx <- as.character(get_variable(Coral, "Sample_name")) %in% Coralsamp$`sample_data(Coral)$Sample_name`
+Coralz <- prune_samples(Coralsampx, Coral)
+Coralsub <- prune_samples(sample_data(Coral)$Sample_name %in% Coralsamp$`sample_data(Coral)$Sample_name`, Coral)
+Coralsub
+
+Grasampx <- as.character(get_variable(Gra, "Sample_name")) %in% Grasamp$`sample_data(Gra)$Sample_name`
+Graz <- prune_samples(Grasampx, Gra)
+Grasub <- prune_samples(sample_data(Gra)$Sample_name %in% Grasamp$`sample_data(Gra)$Sample_name`, Gra)
+Grasub
+
+total <- merge_phyloseq(oblsub, Facsub,Algsub,Envsub,Coralsub,Grasub)
+min(sample_sums(total))
+max(sample_sums(total))
+total <- rarefy_even_depth(total, sample.size = min(sample_sums(total)),
+                               replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+
+unique(sample_data(total)$Sample_name)
+
+bray <- phyloseq::distance(physeq = total, method = "bray")
+metadata <- as(sample_data(total), "data.frame")
+
+ad <- vegan::adonis2(bray ~ Diet, data=metadata, perm=9999)
+ad
+
+pw<-pairwise.adonis(bray, sample_data(total)$Diet, p.adjust.m="bonferroni", perm=9999)
+pw
+
+##Stats by species
+#Permanova by species "AMSC" "CHCI" "POC"  "CHLU" "CHOR" "POR"  "SED"  "CHPE" "WAT"  "CHRE" "Turf" "CHSP", 
+#"Asp"  "CTFL" "Turb" "CTST" "Lob"  "ZESC" "Dict" "Sarg" "ACR"
+
+Obl <- d2020filt %>%                ### I just ran this and the next several lines of code separately for every species. I just changed "ACR" to whatever species I was subsampling. There's better ways to do this but \_O_/
+  subset_samples(Species == "ACR")
+Obl
+
+oblsamp <- sample_n(as.data.frame(sample_data(Obl)$Sample_name), 5, replace=FALSE)
+
+oblsampx <- as.character(get_variable(Obl, "Sample_name")) %in% oblsamp$`sample_data(Obl)$Sample_name`
+oblz <- prune_samples(oblsampx, Obl)
+ACR <- prune_samples(sample_data(Obl)$Sample_name %in% oblsamp$`sample_data(Obl)$Sample_name`, Obl)
+ACR                                ### So basically change the code "ACR" to whatever species you're working on and it's really fast. Again, there's better ways to do this but this works in a pinch
+
+totalspec <- merge_phyloseq(AMSC, CHCI ,POC, CHLU ,CHOR ,POR , SED , CHPE, WAT , CHRE, Turf ,CHSP, Asp,  CTFL ,Turb ,CTST, Lob  ,ZESC ,Dict ,Sarg ,ACR)
+table(sample_data(totalspec)$Species)
+
+min(sample_sums(totalspec))
+max(sample_sums(totalspec))
+totalspec <- rarefy_even_depth(totalspec, sample.size = min(sample_sums(totalspec)),
+                           replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+
+
+bray <- phyloseq::distance(physeq = totalspec, method = "bray")
+metadata <- as(sample_data(totalspec), "data.frame")
+
+ad <- vegan::adonis2(bray ~ Diet+ Species , data=metadata, perm=9999)
+ad
+
+pw<-pairwise.adonis(bray, sample_data(totalspec)$Species, p.adjust.m="BH", perm=999999)
+pw
+
+sample_data(totalspec)$Sample_name #Important to know exactly which samples were used in the analysis
+
+######################################################## Bar plot
+########################################################
+table(sample_data(d2020)$Species)
+dabledxy2 = transform_sample_counts(d2020, function(x) x / sum(x) )
+psmelted <- psmelt(dabledxy2)
+ps <- psmelted
+
+str(ps)
+
+#Isolate famlies that are unclassified and rename them as "O_[ORder name]"
+ps0 <- ps %>%
+  filter(Family == "0")%>%
+  mutate(prep = "O")%>%
+  unite(Family, c(prep,Order), remove=FALSE)
+ps0<-select(ps0, -prep)
+unique (ps0$Family)
+
+#Remove unclassified families from original dataset
+psn <- ps %>%
+  filter(Family != "0")
+unique (psn$Family)
+
+str(ps0)
+str(psn)
+
+#Now combine the two dataframes again so you have one dataframe where every family has a family name or an order name
+ps <- rbind (ps0, psn)
+
+ps <- ps %>%                               # Any unclassified orders will just be named "unclassified"
+  mutate(Family = replace(Family, Family == "O_0", "O_Unclassified"))
+str(ps)
+
+bar_theme <- function() {
+  theme(axis.text.x= element_text(angle = 90, size=11),
+        strip.background = element_blank(),
+        strip.placement = "inside",
+        strip.text = element_text(size=11, face = "bold"),
+        legend.position = "right",
+        panel.border=element_rect(fill=NA, colour="black",size=.7),
+        panel.spacing = unit(0.5, "lines"),
+        panel.background=element_blank())
+}
+
+#Summarize all the abundance values for each family per sample so you don't have to deal with the annoying lines in the bar plot later
+ps<-ps%>%
+  dplyr::group_by(Family, Species, SampleID, Diet)%>%
+  dplyr::summarize(Abundance=sum(Abundance))
+
+ps$Family[ps$Abundance < 0.03] <- "< 3% abund." #Collapse all taxa <3 % abundance
+
+#now summarize the abundance values per species
+ps<-ps%>%
+  dplyr::group_by(Family, Species, Diet)%>%
+  dplyr::summarize(Abundance=sum(Abundance))
+
+#Pick pretty colors
+color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)]
+n <- 80 #number of taxa you have
+unique(ps$Family)
+col=sample(color, n)
+
+color1 <- c("grey", col)
+
+names(color1) <- levels(factor(ps$Family))
+colScale <- scale_fill_manual(name = "Family",values = color1)
+
+#Generate plot
+barplot <- ggplot(ps , aes(x=factor(Species, levels= c("ACR","POC","POR","CHRE","CHOR","CHLU", "AMSC","CHPE","CHCI","CHSP","CTFL","CTST","ZESC","Asp","Dict","Lob","Sarg","Turb","Turf","SED","WAT" )), y=Abundance,fill=Family))+ 
+  geom_bar(aes(), stat="identity", position = "fill", width = 0.8) +
+  facet_wrap(~factor(Diet, levels= c("Coral", "Obl", "Fac", "Gra","Algae","Environmental")), scales="free_x", nrow=1)+ 
+  bar_theme()+
+  colScale+
+  ylab("Relative Abundance") + xlab("") 
+barplot +theme(legend.position = "bottom") + guides(fill = guide_legend(ncol = 6))
+
+##########Comparing Endozoicomonadaceae abundances
+###################
+endo <- rarefy_even_depth(d2020, sample.size = min(sample_sums(d2020)),
+                           replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+min(sample_sums(endo))
+
+endo = transform_sample_counts(endo, function(x) x / sum(x) )
+
+min(sample_sums(endo))
+max(sample_sums(endo))
+
+endo <- subset_taxa(endo, Family=="Endozoicomonadaceae")
+endomelt <- psmelt(endo)
+check<-sample_data(endomelt)
+endomelt2 <- endomelt %>%
+  group_by(Species,Sample_name,Diet, Type,Year)%>%
+  dplyr::summarize(sumendo = sum(Abundance))
+
+library(plotrix)
+endomeans <- endomelt2 %>%
+  group_by(Species)%>%
+  dplyr::summarize(upper=CI(sumendo)[1], mean=CI(sumendo)[2], lower=CI(sumendo)[3],sd=sd(sumendo), se=std.error(sumendo))%>%
+  dplyr::mutate(CI=upper-mean)
+
+colorsy = c("#cffc65","#63371d","#43C5E3","#F7560C", "#307F4E", "#E185D0")
+
+endoplot <- ggplot (endomelt2, aes(x=factor(Species, levels= c("ACR","POC","POR","CHRE","CHOR","CHLU", "AMSC","CHPE","CHCI","CHSP","CTFL","CTST","ZESC","Asp","Dict","Lob","Sarg","Turb","Turf","SED","WAT" )), y=sumendo)) + 
+  geom_boxplot(outlier.alpha=0)+
+  geom_jitter(aes(color=Diet), alpha=1/2)+
+  facet_wrap(~factor(Diet, levels= c("Coral", "Obl", "Fac", "Gra","Algae", "Environmental")), scales = "free_x", nrow= 1)+
+  scale_color_manual(values=colorsy)+
+  labs(y="Relative abundance of Endozoicomonadaceae reads", x="Sample type")+
+  theme(legend.position = "none")+
+  theme_classic()
+endoplot
+
+######Stats on Endozoicomonadaceae abundances
+endolm <- kruskal.test(sumendo~ Diet,data=endomelt2)
+endolm
+
+dunn <- dunn.test(endomelt2$sumendo, g=endomelt2$Diet, wrap=TRUE, method="BH", list=TRUE)
+
+endomelt3 <- endomelt2 %>%
+  filter(Species %in% c("CTST", "CHOR"))
+
+endolm <- kruskal.test(sumendo~Species,data=endomelt3)
+endolm
+
+
+###############Representation table#######################
+#This code generates the data for Figure 3 the representation table..
+#Now this is a really stupid way to do this but any Phyloseq approach I tried did not work for some reason, so this is what I ended up having to do. 
+#If anyone is reading this, please let me know if there's a working package out there that can do this stuff so I don't ever have to do this again.
+
+d2020xy <- prune_taxa(taxa_sums(d2020)>100, d2020)
+d2020xy <- prune_samples(sample_sums(d2020xy)>=1000, d2020xy) 
+readdepth <- sample_sums(tabled2020xy)
+rd <- as.data.frame(readdepth)
+rd$SampleID <- sample_names(d2020xy)
+str(sample_data(d2020xy))
+
+dabledxy2 <- prune_samples(sample_sums(d2020xy)>=1000, d2020xy)
+dabledxy2 <- rarefy_even_depth(dabledxy2, sample.size = min(sample_sums(dabledxy2)),
+                               replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+
+sample_sums(dabledxy2)
+
+ps<-dabledxy2
+table(sample_data(ps)$Species)
+
+sample_data(ps)$Species <- factor(sample_data(ps)$Species)
+
+## ACR
+ps.acr1 <- prune_samples(ps@sam_data$Species == "ACR", ps)
+ps.acr = prune_taxa(taxa_sums(ps.acr1) > 0, ps.acr1)
+asv.acr <- colnames(otu_table(ps.acr))
+str(asv.acr)
+
+## POC
+ps.poc1 <- prune_samples(ps@sam_data$Species == "POC", ps)
+ps.poc = prune_taxa(taxa_sums(ps.poc1) > 0, ps.poc1)
+asv.poc <- colnames(otu_table(ps.poc))
+str(asv.poc)
+
+## POR
+ps.por1 <- prune_samples(ps@sam_data$Species == "POR", ps)
+ps.por = prune_taxa(taxa_sums(ps.por1) > 0, ps.por1)
+asv.por <- colnames(otu_table(ps.por))
+str(asv.por)
+
+## Asp
+ps.asp1 <- prune_samples(ps@sam_data$Species == "Asp", ps)
+ps.asp = prune_taxa(taxa_sums(ps.asp1) > 0, ps.asp1)
+asv.asp <- colnames(otu_table(ps.asp))
+str(asv.asp)
+
+## Dict
+ps.dict1 <- prune_samples(ps@sam_data$Species == "Dict", ps)
+ps.dict = prune_taxa(taxa_sums(ps.dict1) > 0, ps.dict1)
+asv.dict <- colnames(otu_table(ps.dict))
+str(asv.dict)
+
+## Lob
+ps.lob1 <- prune_samples(ps@sam_data$Species == "Lob", ps)
+ps.lob = prune_taxa(taxa_sums(ps.lob1) > 0, ps.lob1)
+asv.lob <- colnames(otu_table(ps.lob))
+str(asv.lob)
+
+## Sarg
+ps.sarg1 <- prune_samples(ps@sam_data$Species == "Sarg", ps)
+ps.sarg = prune_taxa(taxa_sums(ps.sarg1) > 0, ps.sarg1)
+asv.sarg <- colnames(otu_table(ps.sarg))
+str(asv.sarg)
+
+## Turb
+ps.turb1 <- prune_samples(ps@sam_data$Species == "Turb", ps)
+ps.turb = prune_taxa(taxa_sums(ps.turb1) > 0, ps.turb1)
+asv.turb <- colnames(otu_table(ps.turb))
+str(asv.turb)
+
+## Turf
+ps.turf1 <- prune_samples(ps@sam_data$Species == "Turf", ps)
+ps.turf = prune_taxa(taxa_sums(ps.turf1) > 0, ps.turf1)
+asv.turf <- colnames(otu_table(ps.turf))
+str(asv.turf)
+
+## SED
+ps.sed1 <- prune_samples(ps@sam_data$Species == "SED", ps)
+ps.sed = prune_taxa(taxa_sums(ps.sed1) > 0, ps.sed1)
+asv.sed <- colnames(otu_table(ps.sed))
+str(asv.sed)
+
+## WAT
+ps.wat1 <- prune_samples(ps@sam_data$Species == "WAT", ps)
+ps.wat = prune_taxa(taxa_sums(ps.wat1) > 0, ps.wat1)
+asv.wat <- colnames(otu_table(ps.wat))
+str(asv.wat)
+
+######## fish
+
+## CHRE
+ps.chre1 <- prune_samples(ps@sam_data$Species == "CHRE", ps)
+ps.chre = prune_taxa(taxa_sums(ps.chre1) > 0, ps.chre1)
+asv.chre <- colnames(otu_table(ps.chre))
+str(asv.chre)
+
+## CHOR
+ps.chor1 <- prune_samples(ps@sam_data$Species == "CHOR", ps)
+ps.chor = prune_taxa(taxa_sums(ps.chor1) > 0, ps.chor1)
+asv.chor <- colnames(otu_table(ps.chor))
+str(asv.chor)
+
+## CHLU
+ps.chlu1 <- prune_samples(ps@sam_data$Species == "CHLU", ps)
+ps.chlu = prune_taxa(taxa_sums(ps.chlu1) > 0, ps.chlu1)
+asv.chlu <- colnames(otu_table(ps.chlu))
+str(asv.chlu)
+
+## AMSC
+ps.amsc1 <- prune_samples(ps@sam_data$Species == "AMSC", ps)
+ps.amsc = prune_taxa(taxa_sums(ps.amsc1) > 0, ps.amsc1)
+asv.amsc <- colnames(otu_table(ps.amsc))
+str(asv.amsc)
+
+## CHPE
+ps.chpe1 <- prune_samples(ps@sam_data$Species == "CHPE", ps)
+ps.chpe = prune_taxa(taxa_sums(ps.chpe1) > 0, ps.chpe1)
+asv.chpe <- colnames(otu_table(ps.chpe))
+str(asv.chpe)
+
+## CHCI
+ps.chci1 <- prune_samples(ps@sam_data$Species == "CHCI", ps)
+ps.chci = prune_taxa(taxa_sums(ps.chci1) > 0, ps.chci1)
+asv.chci <- colnames(otu_table(ps.chci))
+str(asv.chci)
+
+## CHSP
+ps.chsp1 <- prune_samples(ps@sam_data$Species == "CHSP", ps)
+ps.chsp = prune_taxa(taxa_sums(ps.chsp1) > 0, ps.chsp1)
+asv.chsp <- colnames(otu_table(ps.chsp))
+str(asv.chsp)
+
+## CTFL
+ps.ctfl1 <- prune_samples(ps@sam_data$Species == "CTFL", ps)
+ps.ctfl = prune_taxa(taxa_sums(ps.ctfl1) > 0, ps.ctfl1)
+asv.ctfl <- colnames(otu_table(ps.ctfl))
+str(asv.ctfl)
+
+## CTST
+ps.ctst1 <- prune_samples(ps@sam_data$Species == "CTST", ps)
+ps.ctst = prune_taxa(taxa_sums(ps.ctst1) > 0, ps.ctst1)
+asv.ctst <- colnames(otu_table(ps.ctst))
+str(asv.ctst)
+
+## ZESC
+ps.zesc1 <- prune_samples(ps@sam_data$Species == "ZESC", ps)
+ps.zesc = prune_taxa(taxa_sums(ps.zesc1) > 0, ps.zesc1)
+asv.zesc <- colnames(otu_table(ps.zesc))
+str(asv.zesc)
+
+
+str(intersect(asv.chre, asv.acr))
+str(intersect(asv.chre, asv.poc))
+str(intersect(asv.chre, asv.por))
+str(intersect(asv.chre, asv.asp))
+str(intersect(asv.chre, asv.dict))
+str(intersect(asv.chre, asv.lob))
+str(intersect(asv.chre, asv.sarg))
+str(intersect(asv.chre, asv.turb))
+str(intersect(asv.chre, asv.turf))
+str(intersect(asv.chre, asv.sed))
+str(intersect(asv.chre, asv.wat))
+?intersect()
+
+str(intersect(asv.chor, asv.acr))
+str(intersect(asv.chor, asv.poc))
+str(intersect(asv.chor, asv.por))
+str(intersect(asv.chor, asv.asp))
+str(intersect(asv.chor, asv.dict))
+str(intersect(asv.chor, asv.lob))
+str(intersect(asv.chor, asv.sarg))
+str(intersect(asv.chor, asv.turb))
+str(intersect(asv.chor, asv.turf))
+str(intersect(asv.chor, asv.sed))
+str(intersect(asv.chor, asv.wat))
+
+str(intersect(asv.chlu, asv.acr))
+str(intersect(asv.chlu, asv.poc))
+str(intersect(asv.chlu, asv.por))
+str(intersect(asv.chlu, asv.asp))
+str(intersect(asv.chlu, asv.dict))
+str(intersect(asv.chlu, asv.lob))
+str(intersect(asv.chlu, asv.sarg))
+str(intersect(asv.chlu, asv.turb))
+str(intersect(asv.chlu, asv.turf))
+str(intersect(asv.chlu, asv.sed))
+str(intersect(asv.chlu, asv.wat))
+
+str(intersect(asv.amsc, asv.acr))
+str(intersect(asv.amsc, asv.poc))
+str(intersect(asv.amsc, asv.por))
+str(intersect(asv.amsc, asv.asp))
+str(intersect(asv.amsc, asv.dict))
+str(intersect(asv.amsc, asv.lob))
+str(intersect(asv.amsc, asv.sarg))
+str(intersect(asv.amsc, asv.turb))
+str(intersect(asv.amsc, asv.turf))
+str(intersect(asv.amsc, asv.sed))
+str(intersect(asv.amsc, asv.wat))
+
+str(intersect(asv.chpe, asv.acr))
+str(intersect(asv.chpe, asv.poc))
+str(intersect(asv.chpe, asv.por))
+str(intersect(asv.chpe, asv.asp))
+str(intersect(asv.chpe, asv.dict))
+str(intersect(asv.chpe, asv.lob))
+str(intersect(asv.chpe, asv.sarg))
+str(intersect(asv.chpe, asv.turb))
+str(intersect(asv.chpe, asv.turf))
+str(intersect(asv.chpe, asv.sed))
+str(intersect(asv.chpe, asv.wat))
+
+str(intersect(asv.chci, asv.acr))
+str(intersect(asv.chci, asv.poc))
+str(intersect(asv.chci, asv.por))
+str(intersect(asv.chci, asv.asp))
+str(intersect(asv.chci, asv.dict))
+
+str(intersect(asv.chci, asv.lob))
+str(intersect(asv.chci, asv.sarg))
+str(intersect(asv.chci, asv.turb))
+str(intersect(asv.chci, asv.turf))
+str(intersect(asv.chci, asv.sed))
+str(intersect(asv.chci, asv.wat))
+
+str(intersect(asv.chsp, asv.acr))
+str(intersect(asv.chsp, asv.poc))
+str(intersect(asv.chsp, asv.por))
+str(intersect(asv.chsp, asv.asp))
+str(intersect(asv.chsp, asv.dict))
+str(intersect(asv.chsp, asv.lob))
+str(intersect(asv.chsp, asv.sarg))
+str(intersect(asv.chsp, asv.turb))
+str(intersect(asv.chsp, asv.turf))
+str(intersect(asv.chsp, asv.sed))
+str(intersect(asv.chsp, asv.wat))
+
+str(intersect(asv.ctfl, asv.acr))
+str(intersect(asv.ctfl, asv.poc))
+str(intersect(asv.ctfl, asv.por))
+str(intersect(asv.ctfl, asv.asp))
+str(intersect(asv.ctfl, asv.dict))
+str(intersect(asv.ctfl, asv.lob))
+str(intersect(asv.ctfl, asv.sarg))
+str(intersect(asv.ctfl, asv.turb))
+str(intersect(asv.ctfl, asv.turf))
+str(intersect(asv.ctfl, asv.sed))
+str(intersect(asv.ctfl, asv.wat))
+
+str(intersect(asv.ctst, asv.acr))
+str(intersect(asv.ctst, asv.poc))
+str(intersect(asv.ctst, asv.por))
+str(intersect(asv.ctst, asv.asp))
+str(intersect(asv.ctst, asv.dict))
+str(intersect(asv.ctst, asv.lob))
+str(intersect(asv.ctst, asv.sarg))
+str(intersect(asv.ctst, asv.turb))
+str(intersect(asv.ctst, asv.turf))
+str(intersect(asv.ctst, asv.sed))
+str(intersect(asv.ctst, asv.wat))
+
+str(intersect(asv.zesc, asv.acr))
+str(intersect(asv.zesc, asv.poc))
+str(intersect(asv.zesc, asv.por))
+str(intersect(asv.zesc, asv.asp))
+str(intersect(asv.zesc, asv.dict))
+str(intersect(asv.zesc, asv.lob))
+str(intersect(asv.zesc, asv.sarg))
+str(intersect(asv.zesc, asv.turb))
+str(intersect(asv.zesc, asv.turf))
+str(intersect(asv.zesc, asv.sed))
+str(intersect(asv.zesc, asv.wat))
+
+#The figure was made in excel using output form this code
+
