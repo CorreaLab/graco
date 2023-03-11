@@ -84,9 +84,10 @@ str(sample_data(d2020xy))
 rd2 <- merge(rd, map, by="SampleID")
 min(rd2$readdepth)
 
+
 #NMDS
 d2020nmds <- rarefy_even_depth(d2020xy, sample.size = min(sample_sums(d2020xy)),
-                               replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE)
+                               replace = TRUE, trimOTUs = TRUE, verbose = TRUE, rngseed=TRUE) #Default seed = 711
 
 #transform to relative abundances
 d2020nmds2 = transform_sample_counts(d2020nmds, function(x) x / sum(x) )
