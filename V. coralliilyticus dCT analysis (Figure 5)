@@ -11,13 +11,19 @@ performance::check_model(statrt)
 TukeyHSD(statrt)
 
 #figure 5 of manuscript
-figplot <- ggplot(rt2, aes(x=fct_reorder(diet, -dCT), y=-dCT))+
-  geom_boxplot()+
-  geom_point()+
+colorsrt = c("#F7560C", "#307F4E", "#E185D0")
+
+figplot <- ggplot(rt2, aes(x=fct_reorder(diet, -dCT), y=dCT))+
+  geom_boxplot(width=0.5, outlier.alpha=0)+
+  geom_jitter(aes(color=diet),width=0.1, alpha=2/3)+
   theme_classic()+
+  scale_color_manual(values=colorsrt)  +
   geom_signif(comparisons = list(c("Facultative corallivore", "Grazer/detritivore")), 
               map_signif_level=TRUE, y_position = -8,annotation ="*")+
   geom_signif(comparisons = list(c("Obligate corallivore", "Grazer/detritivore")), 
-              map_signif_level=TRUE, y_position = -7,annotation ="**")
+              map_signif_level=TRUE, y_position = -7,annotation ="**")+
+  theme(legend.position = "none")+
+  scale_y_reverse()
 figplot
+
 
